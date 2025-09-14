@@ -1,0 +1,1446 @@
+---
+title: "MS Comp Exam"
+author: "Min Kim"
+date: "6/27/2022"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+# Install packages
+# install.packages("tidyverse")
+# install.packages("sjPlot")
+library(tidyverse)
+library(sjPlot)
+library(readxl)
+library(dplyr)
+library(nlme)
+library(ggplot2)
+library(Matrix)
+# install.packages("table1")
+library(table1)
+library(magrittr)
+# install.packages("xtable")
+library(xtable)
+library(stats)
+#install.packages("VGAM")
+library(VGAM)
+library(stargazer)
+
+```
+
+* Dataset
+```{r}
+data <- read_excel("C:/Users/minjk/Downloads/HI_DUR_POSITION.xls")
+
+#Date Correction 
+data$`Animal ID` = as.factor(data$`Animal ID`)
+data[80,]$Date = as.Date('2017-04-04')
+
+days = data$Date - data$Birthdate # age of rhesus monkeys in days 
+data$age_days = as.numeric(days)
+
+age_actual = days/(365.25/12) # age of rhesus monkeys in months 
+data$age_actual = as.numeric(age_actual)
+
+#cbind(data$`Age (months)`, age_actual)
+
+
+
+# Response: Duration in Front
+profile = (data$`PF FRONT DUR` + data$`PN FRONT DUR`)/2
+stare = (data$`SF FRONT DUR` + data$`SN FRONT DUR`)/2
+data$profile = profile
+
+data$stare = stare
+
+
+#difftime(data$Date,data$Birthdate)
+#use seq.Date for unit = months
+```
+
+*Descriptive Statistics 
+
+# Contingency Table (Extra will not use)
+```{r}
+# sjt.xtab(data$age,data$Treatment2,title = "Contingency Table of Age (Months) and Treatment Group", var.label = c("Months","Treatment"))
+```
+
+# Table 1. Summary for Profile and Stare Front Duration (sec) from 1 month to 35 months (Appendix)
+```{r}
+# Table of Useful Variables 
+#Table 1. Summary for Profile and Stare Front Duration (sec) from 1 month to 35 months 
+
+table1::label(data$`PF FRONT DUR`) = "PF FRONT DUR (In Sec)"
+table1::label(data$`PN FRONT DUR`) = "PN FRONT DUR (In Sec)"
+table1::label(data$`SF FRONT DUR`) = "SF FRONT DUR (In Sec)"
+table1::label(data$`SN FRONT DUR`) = "SN FRONT DUR (In Sec)"
+table1::label(data$`Age (months)`) = "Age (months)"
+table1::label(data$age_actual) = "Accuate Age (In Months)"
+table1::label(data$age_days) = "Accurate Age (In Days)"
+
+#Response
+table1::label(data$profile) = "Profile Front (PF + PN)"
+table1::label(data$stare) = "Stare Front (SF + SN)"
+table1= table1::table1(~`PF FRONT DUR`+`PN FRONT DUR`+`SF FRONT DUR` + `SN FRONT DUR` + age_days + age_actual + profile + stare|as.factor(`Age (months)`)*Treatment2 , data = data)
+table1
+# table1= table1::table1(~as.factor(`Age (months)`)+`PF FRONT DUR`+`PN FRONT DUR`+`SF FRONT DUR` + `SN FRONT DUR` + age_days + age_actual + profile + stare|Treatment2 , data = data)
+# table1
+
+
+# Export table to excel file
+# write.table(table1,"table1.csv", col.names = T, row.names=F, append= T, sep=',')
+```
+
+*Table 2 Smaller Table (Used in report)
+```{r}
+#Table 1. Summary for Profile and Stare Front Duration (sec) from 1 month to 35 months
+table1::label(data$`PF FRONT DUR`) = "PF FRONT DUR (In Sec)"
+table1::label(data$`PN FRONT DUR`) = "PN FRONT DUR (In Sec)"
+table1::label(data$`SF FRONT DUR`) = "SF FRONT DUR (In Sec)"
+table1::label(data$`SN FRONT DUR`) = "SN FRONT DUR (In Sec)"
+table1::label(data$`Age (months)`) = "Age (months)"
+table1::label(data$age_actual) = "Accurate Age (In Months)"
+table1::label(data$age_days) = "Accurate Age (In Days)"
+
+
+#Response
+table1::label(data$profile) = "Profile Front (PF + PN)/2"
+table1::label(data$stare) = "Stare Front (SF + SN)/2"
+table2= table1::table1(~as.factor(`Age (months)`)+age_days + age_actual +`PF FRONT DUR`+`PN FRONT DUR`+`SF FRONT DUR` + `SN FRONT DUR`+ profile + stare|Treatment2 , data = data, footnote = "c")
+table2
+# table1= table1::table1(~as.factor(`Age (months)`)+`PF FRONT DUR`+`PN FRONT DUR`+`SF FRONT DUR` + `SN FRONT DUR` + age_days + age_actual + profile + stare|Treatment2 , data = data)
+# table1
+# ?table1
+# write.table(table2,"table2.csv", col.names = T, row.names = T, append = T, sep = ',')
+
+# write.table(table1,"table1.csv", col.names = T, row.names=F, append= T, sep=',')
+```
+
+
+* Exploratory Data Analysis
+
+(APPENDIX?: LMM Normal distribution assumption?)
+
+```{r}
+# Distribution plot
+
+# Check for y~x linear assumption 
+# Time: Age vs Profile
+boxplot(data$profile~data$`Age (months)`)
+# Age vs. Stare
+boxplot(data$stare~data$`Age (months)`)
+
+# Treatement group vs. profile
+# Profile 
+boxplot(data$profile~data$Treatment2)
+# Stare
+boxplot(data$stare~data$Treatment2)
+```
+
+
+1. Average Age Difference of MIA vs Control monkey's Profile Duration of for each time point 1,3,6,23, and 35 months
+(Maybe in the presentation)
+```{r}
+library(dplyr)
+mean_profile = data %>% 
+        group_by(`Age (months)`,Treatment2) %>% 
+        summarise(
+          profile = mean(profile),
+          age_actual = mean(age_actual)
+        )
+mean_profile
+```
+
+1. Average Age Difference of MIA vs Control monkey's Stare Duration of for each time point 1,3,6,23, and 35 months
+
+```{r}
+mean_stare = data %>% 
+        group_by(`Age (months)`,Treatment2) %>% 
+        summarise(
+          stare = mean(stare),
+          age_actual = mean(age_actual)
+        )
+mean_stare
+
+```
+
+#Observed mean difference 
+```{r}
+mean_table =as.data.frame(cbind(mean_profile$`Age (months)`, mean_profile$Treatment2, mean_profile$profile, mean_stare$stare))
+mean_table
+```
+
+
+```{r}
+#Age differences for MIA and Control group of Profile and Stare conditions
+cbind(mean_profile$age_actual, mean_stare$age_actual, abs(mean_profile$age_actual-mean_stare$age_actual))
+```
+
+- Age differences for MIA and Control group of Profile and Stare conditions are small. But age difference in days are big (possible 1 month difference): Use actual age in months
+
+
+
+2. Plot Distributions of Profile and Stare duration and means over 1 to 35 months for MIA vs. Control group
+
+(Used in the report and presentation)
+```{r}
+
+#Using accurate age
+#Profile
+par(mfrow = c(1,2))
+mean_profile = data %>% 
+        group_by(`Age (months)`,Treatment2) %>% 
+        summarise(
+          profile = mean(profile),
+          age_actual = mean(age_actual)
+        )
+# As trajectory
+
+par(mfrow = c(2,2))
+ggplot(data, aes(x = age_actual, y = profile, color = Treatment2)) +
+  geom_point(aes(group = `Animal ID`), alpha = 0.3)+
+  geom_line(aes(group = `Animal ID`), alpha = 0.3) + 
+  geom_line(data = mean_profile, alpha = 0.8, size = 1.5) + labs(x = "Monkey's Age (Months)", y = "Average Profile Front Duration", title = "Profile Front Duration")+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+mean_stare = data %>% 
+        group_by(`Age (months)`,Treatment2) %>% 
+        summarise(
+          stare = mean(stare),
+          age_actual = mean(age_actual)
+        )
+
+#Stare
+# As trajectory
+ggplot(data, aes(x = age_actual, y = stare, color = Treatment2)) +
+  geom_point(aes(group = `Animal ID`), alpha = 0.3)+
+  geom_line(aes(group = `Animal ID`), alpha = 0.3) + 
+  geom_line(data = mean_stare, alpha = 0.8, size = 1.5)+ labs(x = "Monkey's Age (Months)", y = "Average Stare Front Duration", title = "Stare Front Duration")+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+2.  Mean trajectories of MIA vs. Control from 1 month to 35 months with Error Bar
+
+(May not be used: I don't think its correct)
+
+(May be in Appendix and Presentation)
+```{r}
+# Mean trajectories of MIA vs. Control from 1 month to 35 months with Error Bar
+
+# Obtain mean by age (months) & treatment group 
+data.summ = aggregate(data$profile, list(data$`Age (months)`, data$Treatment2), mean)
+names(data.summ) = c("Months", "Group", "Mean")
+#View(data.summ)
+# Table
+
+data.summ1 = aggregate(data$stare, list(data$`Age (months)`, data$Treatment2), mean)
+names(data.summ1) = c("Months", "Group", "Mean")
+#View(data.summ1)
+
+## create plot: Error-bar Plot
+par(mfrow = c(1,2))
+ggplot(data.summ, aes(x = Months, y = Mean, group = Group, color = Group)) +
+  geom_line() + geom_point() + geom_errorbar(aes(ymin = Mean-sd(Mean),ymax = Mean+sd(Mean)))+
+  labs(x = "Age (Months)", y = "Profile")
+ggplot(data.summ1, aes(x = Months, y = Mean, group = Group, color = Group)) +
+  geom_line() + geom_point() +geom_errorbar(aes(ymin = Mean-sd(Mean),ymax = Mean+sd(Mean)))
+  labs(x = "Age (Months)", y = "Stare")
+  
+
+
+```
+
+
+*Overall: For both Profile and Stare,
+
+- Difference in mean duration for each time points between  MIA and Control becomes smaller over time. 
+
+- At approximate 1 month time point, the difference in mean front duration is the largest and MIA group's mean duration is the lowest, whereas Control group's mean duration is highest over time. 
+
+- The mean duration of MIA group increases most rapid from approximate 1 month to 3 months
+
+*Profile
+
+- The trend may not be linear for both MIA and Control Group.
+
+- The difference in mean duration between MIA and Control group starting from approximate 6 months becomes very minimal.
+
+- Starting from 6 months to 35 months, the mean duration for MIA and control tend to be consistent around 30 seconds. 
+
+*Stare
+
+- The trend is linear for MIA and Control from 3 months.
+
+- Starting from approximate 3 months, MIA group's mean duration at each time points are higher than control group.
+
+- Stare Front duration tends to drop more strongly than Profile Front duration over time
+
+- Mean duration for each time for MIA and Control group follow similar pattern over time except 1 month
+
+*Conclusion:
+
+- MIA group's responsiveness to both human intruder's profile and stare condition are lowest at 1 month  
+
+- For human intruder's stare front position, both MIA and control group tend to have less responsiveness over time.
+
+Just for exploratory analysis purpose:
+
+3. Individual Trajectories of Front Duration time of MIA vs. Control Group under 4 conditions Profile Far,Near and Stare Far,Near
+
+(May be in Appendix and Presentation)
+```{r}
+par(mfrow = c(2,2))
+#PF
+ggplot(data, aes(x = age_actual ,y =`PF FRONT DUR`,colour = `Animal ID`)) + facet_wrap(~Treatment2)+geom_point()+ geom_line() + labs(x = "Monkey's Age (Months)", y = "Profile Far Front Duration", title = "Profile Far Front Duration") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+#PN
+ggplot(data, aes(x = age_actual ,y =`PN FRONT DUR`,colour = `Animal ID`)) + facet_wrap(~Treatment2)+geom_point()+ geom_line() + labs(x = "Monkey's Age (Months)", y = "Profile Near Front Duration", title = "Profile Near Front Duration") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+#SF
+ggplot(data, aes(x = age_actual ,y =`SF FRONT DUR`,colour = `Animal ID`)) + facet_wrap(~Treatment2)+geom_point()+ geom_line() + labs(x = "Monkey's Age (Months)", y = "Stare Far Front Duration", title = "Stare Far Front Duration") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+#SN
+ggplot(data, aes(x = age_actual ,y =`SN FRONT DUR`,colour = `Animal ID`)) + facet_wrap(~Treatment2)+geom_point()+ geom_line() + labs(x = "Monkey's Age (Months)", y = "Stare Near Front DurationFront Duration", title = "Stare Near Front Duration") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+3. Individual Trajectories of Monkey's of MIA vs. Control Group under 2 conditions Profile vs. Stare
+
+(May be in Appendix and Presentation)
+```{r}
+#Individual Trajectories of Monkey's of MIA vs. Control Group under 2 conditions Profile vs. Stare
+# Consider FAR And near? 
+# Use age_actual
+# Difficult to capture the full distribution of trajectories 
+
+par(mfrow =c(2,2))
+
+#Outcome: Profile and Stare
+# Profile 
+ggplot(data, aes(x = age_actual ,y = profile ,colour = `Animal ID`)) + facet_wrap(~Treatment2)+
+  geom_point()+ geom_line() + labs(x = "Monkey's Age (Months)", y = "Average Profile Front Duration", title = "Profile Front Duration") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+#Stare
+ggplot(data, aes(x = age_actual, y = stare  ,colour = `Animal ID`)) + facet_wrap(~Treatment2)+
+  geom_point()+geom_line() + labs(x = "Monkey's Age (Months)", y = "Average Stare Front Duration", title = "Stare Front Duration") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+
+```
+*Overall: for both profile and stare, 
+
+- Subjects track fairly well.
+
+- Within-animal variability is highest from approximate 1 month to 3 months.
+
+*Profile
+
+- Control group and MIA group seems to have similar Profile Front Duration: relatively large between-subject variation at approximate 23 months.
+
+*Stare
+
+- Starting from approximate 3 months, MIA group's duration may decrease more rapidly than control group.
+
+
+- MIA group's standard deviation decreases from  over time.
+
+- MIA group's standard deviation decreases from 1 month to 23 months with slight increase from 23 month to 35 month.
+
+
+*Statistical Modeling
+
+- Linear Mixed Model 
+
+Features: 
+
+- Model for mean response: duration time
+
+- Model for covariance structure to account for correlated nature of repeated measurement of subjects.
+
+- Fixed Effects + Random effects
+
+4. Plot of median (and IQR) of residuals of Profile and Stare by months
+ 
+*Examine the degrees of dispersion (spread) among the residuals as a function of time 
+
+```{r}
+#Compute residuals, removing effects of age in months and treatment group 
+# Remove time trend for treatment
+# subtract mean for each time in each treatment
+
+colnames(data)[2] = c("id") # change to fit in model without producing an error
+colnames(data)[8] = c("age") # change to fit in model without producing an error
+
+
+
+#Use continuous accurate age
+
+#OLS 
+data$age2 = data$age_actual^2
+data$age3 = data$age_actual^3
+
+#Profile
+#Model with continuous age, treatment,and age and treatment interaction, quadratic and cubic age
+profile_dur_fit = lm(profile~Treatment2*age_actual+Treatment2*age2 +Treatment2*age3,data = data)
+
+
+#Stare
+stare_dur_fit = lm(stare~Treatment2*age_actual+Treatment2*age2 +Treatment2*age3, data = data)
+
+
+colnames(data)[2] = c("Animal ID") # Re-change for previous code that used "Animal ID"
+colnames(data)[8] = c("Age (months)") # Re-change for previous code that used "Age (months)"
+
+
+
+#Mean of residual by month 
+# Use of 'Age (months)` instead of age_actual still gives same mean and sd of residuals (because the residuals are already calculated based on age_actual) and ease the plotting.
+
+#Profile
+
+#Compute residuals, removing effects of age in months and treatment group
+data$protrs_profile = resid(profile_dur_fit) #residuals for profile observations
+mean.resid.profile = aggregate(data$protrs_profile, list(data$`Age (months)`), mean)
+#sd of residual by month
+sd.resid.profile = aggregate(data$protrs_profile, list(data$`Age (months)`),sd)
+#frequency of residual by month
+freq.resid.profile = aggregate(rep(1,dim(data)[1]), list(data$`Age (months)`), sum)
+
+summ.resid.profile=cbind(mean.resid.profile,sd.resid.profile[,2],freq.resid.profile[,2])
+names(summ.resid.profile)=c("month","mean","SD","freq")
+#summ.resid.profile # Not by treatment group included 
+
+
+#Stare residuals 
+
+data$protrs_stare = resid(stare_dur_fit) 
+#Mean of residual by month 
+mean.resid.stare = aggregate(data$protrs_stare, list(data$`Age (months)`), mean)
+#sd of residual by month
+sd.resid.stare = aggregate(data$protrs_stare, list(data$`Age (months)`),sd)
+#frequency of residual by month
+freq.resid.stare = aggregate(rep(1,dim(data)[1]), list(data$`Age (months)`), sum)
+
+summ.resid.stare=cbind(mean.resid.stare,sd.resid.stare[,2],freq.resid.stare[,2])
+names(summ.resid.stare)=c("month","mean","SD","freq")
+#summ.resid.stare # Not by treatment group included 
+
+
+
+## obtain median, Q1, Q3 by month for residuals
+
+#Profile
+profile.summ = aggregate(data$protrs_profile,list(data$`Age (months)`), function(x) quantile(x, probs = c(0.25,0.5,0.75)))
+profile.summ2 = as.data.frame(cbind(profile.summ[,1], profile.summ[,2]))
+names(profile.summ2) = c("month","Q1", "Median", "Q3")
+
+#Stare
+stare.summ = aggregate(data$protrs_stare,list(data$`Age (months)`), function(x) quantile(x, probs = c(0.25,0.5,0.75)))
+stare.summ2 = as.data.frame(cbind(stare.summ[,1], stare.summ[,2]))
+names(stare.summ2) = c("month","Q1", "Median", "Q3")
+
+# Plot to examine the degree of dispersion (spread) among the residuals as a function of time
+library(ggplot2)
+par(mfrow =c(2,1))
+#Profile
+ggplot(profile.summ2, aes(x=month, y=Median)) + 
+  geom_point()+ 
+  geom_errorbar(aes(ymin=Q1, ymax=Q3), width=.2,position=position_dodge(0.05)) +
+  labs(x="Age (months)", y = "Profile Front Duration Residual",title="Median (IQR) of Residuals")
+#Stare
+ggplot(stare.summ2, aes(x=month, y=Median)) + 
+  geom_point()+
+  geom_errorbar(aes(ymin=Q1, ymax=Q3), width=.2,position=position_dodge(0.05)) +
+  labs(x="Age (months)", y = "Stare Front Duration Residual",title="Median (IQR) of Residuals")
+```
+
+*The plot shows that the variance of residuals is fairly constant across time except week 1)
+
+- unusual with long data
+
+- often: variance increasing with time 
+
+
+4. ACF: Autocorrelation Scatterplot Matrix
+
+- Examine the association across time between observations on the same object
+
+*Exploration of Correlation Structure 
+
+- We examine the correlation structure among the error terms
+
+
+-$e_{ij}$'s are correlated within subject i 
+
+-$corr(e_{ij}, e_{ik})$
+
+- Do not explore correlation of $Y_ij$ directly. Remove effect of covariates first and explore the correlation of residuals (For exploration purpose)
+
+
+*Scatter Matrix: Profile residuals for each pair of observation times 
+```{r}
+
+subset_profile= data[,c(1,8,43)] #subject ID, Treatment, profile residuals 
+# into wide format
+wide_profile =  subset_profile %>%
+  spread(`Age (months)`,protrs_profile)
+
+# Plot for Autocorrelation Scatterplot Matrix
+pairs(wide_profile[,-1])
+
+#Each point in this plot represents a pair of observations (pair of residuals) on the same subject over months
+
+# Correlation matrix 
+cor(wide_profile[,-1],use = "pairwise.complete.obs")
+
+
+# Correlation between obseravations are not strong overall 
+# Relatively strong negative association (-0.26091184) with time lag of 5 months (month 1 and month 6) and with time lag of 34 months (month 1 and month 35)
+#Lag is not constant due to observation time setting.
+
+```
+
+*Scatter Matrix: Stare residuals for each pair of observation times
+
+```{r}
+subset_stare= data[,c(1,8,44)]
+
+library(tidyverse)
+
+wide_stare =  subset_stare %>%
+  spread(`Age (months)`,protrs_stare)
+
+# plot for Autocorrelation Scatterplot Matrix
+pairs(wide_stare[,-1])
+
+#Each point in this plot represents a pair of observations (pair of residuals) on the same subject over months
+
+# Correlation matrix 
+cor(wide_stare[,-1],use = "pairwise.complete.obs")
+
+### Strongest association (negative) with time lag of 5 months Time 1 and Time 6 weakens with greater lags
+```
+*Autocorrelation Function and Correlogram
+
+- pool all of the pairs of residuals along each diagonal in the scatterplot matrix and compute the correlation for each pair
+
+*ACF conclusion: The plots of ACF for both profile and stare were calculated following:
+
+*ACF plot shows that as observations on the same subject are separated by greater lags, two observations on the same subject are more alike.
+*Profile
+
+
+*Profile
+*ACF using unique time months (1,3,6,25,35) which produces 10 unique time lag 
+```{r}
+# extract all pairs within each subject
+# Profile
+data.pairs=list()
+for(i in 1:28)
+{
+  subject.i = data[data$`Subject ID` == i,]
+  data.pairs.i = gtools::combinations(dim(subject.i)[1],2, repeats = FALSE)
+  data.pairs.add = data.frame(id = rep(i, dim(data.pairs.i)[1]),
+    month1 = subject.i$`Age (months)`[data.pairs.i[,1]],
+    month2 = subject.i$`Age (months)`[data.pairs.i[,2]],
+    protrs1 = subject.i$protrs_profile[data.pairs.i[,1]],
+    protrs2 = subject.i$protrs_profile[data.pairs.i[,2]])
+  data.pairs = rbind(data.pairs, data.pairs.add)
+}
+data.pairs$lag = abs(data.pairs$month2 - data.pairs$month1)
+table(data.pairs$lag)
+x = sort(unique(data.pairs$lag))
+lag.list = x
+ACF = TL = rep(NA, length(lag.list))
+for(lag in 1:length(lag.list))
+{
+  subset = data.pairs[which(data.pairs$lag == lag.list[lag]),4:5]
+  ACF[lag] = cor(subset, use = "pairwise.complete.obs")[1,2]
+  TL[lag] = 1.96/sqrt(dim(subset)[1])
+}
+summ.acf=cbind(lag.list,ACF,TL)
+summ.acf
+
+plot(lag.list,ACF,"l",xlab="Time lag",xlim=c(0,35),ylim=c(-1,1))
+lines(lag.list,TL,lty=2)
+legend("topright",c("Autocorrelation function","95% tolerance limit"),lty=1:2)
+#dev.off()
+
+# 95% TL outside of which the observed correlation will fall only 5% chance, given null hypothesis of zero correlation is true 
+
+```
+*ACF of Stare
+
+```{r}
+#Stare 
+data.pairs=list()
+for(i in 1:28)
+{
+  subject.i = data[data$`Subject ID` == i,]
+  data.pairs.i = gtools::combinations(dim(subject.i)[1],2, repeats = FALSE)
+  data.pairs.add = data.frame(id = rep(i, dim(data.pairs.i)[1]),
+    month1 = subject.i$`Age (months)`[data.pairs.i[,1]],
+    month2 = subject.i$`Age (months)`[data.pairs.i[,2]],
+    protrs1 = subject.i$protrs_stare[data.pairs.i[,1]],
+    protrs2 = subject.i$protrs_stare[data.pairs.i[,2]])
+  data.pairs = rbind(data.pairs, data.pairs.add)
+}
+data.pairs$lag = abs(data.pairs$month2 - data.pairs$month1)
+
+y = sort(unique(data.pairs$lag))
+lag.list = y
+ACF = TL = rep(NA, length(lag.list))
+for(lag in 1:length(lag.list))
+{
+  subset = data.pairs[which(data.pairs$lag == lag.list[lag]),4:5]
+  ACF[lag] = cor(subset, use = "pairwise.complete.obs")[1,2]
+  TL[lag] = 1.96/sqrt(dim(subset)[1])
+}
+summ.acf=cbind(lag.list,ACF,TL)
+summ.acf
+
+plot(lag.list,ACF,"l",xlab="Time lag",xlim=c(0,35),ylim=c(-1,1))
+lines(lag.list,TL,lty=2)
+legend("topright",c("Autocorrelation function","95% tolerance limit"),lty=1:2)
+#dev.off()
+
+# 95% TL outside of which the observed correlation will fall only 5% chance, given null hypothesis of zero correlation is true 
+
+# greater correlation at 29 month time lag 
+```
+
+-Exchangeable Correlation seems more applicable than Exponential Correlation structure (however, correlation matrix does not depend on the ACF, Need testing)
+
+4. Variogram 
+
+*Assumptions
+
+- residuals are weakly stationary: residuals have constant mean over time and constant variance.
+
+- Correlation depends only on the time lag between two residuals.
+
+- Months 1,3,6,23,35 are assumed to be each time point of (1,2,3,4,5) and ACF is calculated by pooling all of the pairs of residuals.
+
+```{r}
+#Profile
+mean_res.profile =data %>%
+  group_by(`Age (months)`, Treatment2) %>%
+  summarise(
+    mean(data$protrs_profile)
+  )
+mean_res.profile
+
+# Mean of residuals are constant at 0
+
+#Stare
+mean_res.stare =data %>%
+  group_by(`Age (months)`, Treatment2) %>%
+  summarise(
+    mean(data$protrs_stare)
+  )
+mean_res.stare
+
+# Mean of residuals are constant at 0
+```
+
+*Variogram
+
+- Plot of Variogram function tends to be close to estimate for var(e(t)) (half the average of between-subject squared differences), 250.3808, it suggests that autocorrelation is zero.
+
+*Profile
+```{r}
+data.pairs=list()
+for(i in 1:28)
+{
+  subject.i = data[data$`Subject ID` == i,]
+  data.pairs.i = gtools::combinations(dim(subject.i)[1],2, repeats = FALSE)
+  data.pairs.add = data.frame(id = rep(i, dim(data.pairs.i)[1]),
+    month1 = subject.i$`Age (months)`[data.pairs.i[,1]],
+    month2 = subject.i$`Age (months)`[data.pairs.i[,2]],
+    protrs1 = subject.i$protrs_profile[data.pairs.i[,1]],
+    protrs2 = subject.i$protrs_profile[data.pairs.i[,2]])
+  data.pairs = rbind(data.pairs, data.pairs.add)
+}
+data.pairs$lag = abs(data.pairs$month2 - data.pairs$month1) # list of time lag 
+
+x = sort(unique(data.pairs$lag))# list of unique time lag
+lag.list = x
+
+# v = dependent variable to fit a model on time lag
+data.pairs$v = (data.pairs$protrs1- data.pairs$protrs2)^2/2
+
+#ANOVA model
+model.anova = lm(v~as.factor(data.pairs$lag)-1,data = data.pairs)
+pred.anova=predict(model.anova,newdata = data.frame(lag=as.factor(data.pairs$lag)))
+
+# variance 
+numerator=0
+denominator=0
+for(i in 1:28)
+{
+  subset.i = data[data$`Subject ID`== i,]
+  subset.i2 = data[data$`Subject ID`>i,]
+  for(j in 1:dim(subset.i)[1])
+    numerator= numerator+sum((subset.i$protrs_profile[j]-subset.i2$protrs_profile)^2)
+  denominator = denominator + dim(subset.i)[1]*dim(subset.i2)[1]
+}
+sigma2 = numerator/denominator/2
+sigma2 
+
+#Variogram
+plot(data.pairs$lag, data.pairs$v,xlab = 'Time lag', ylab = "Variogram")
+lines(1:length(pred.anova), pred.anova)
+lines(1:length(pred.anova), rep(sigma2,length(pred.anova)),lty = 2)
+
+# # include small v only upto line 300
+# plot(data.pairs$lag, data.pairs$v, ylim = c(0,300), xlab = "Time lag", ylab = "Variogram")
+# lines(1:length(pred.anova), pred.anova)
+# lines(1:length(pred.anova), rep(sigma2,length(pred.anova)),lty = 2)
+```
+
+
+*Stare
+*ACF using unique time months (1,3,6,25,35) which produces 10 unique time lag
+```{r}
+#Profile
+data.pairs=list()
+for(i in 1:28)
+{
+  subject.i = data[data$`Subject ID` == i,]
+  data.pairs.i = gtools::combinations(dim(subject.i)[1],2, repeats = FALSE)
+  data.pairs.add = data.frame(id = rep(i, dim(data.pairs.i)[1]),
+    month1 = subject.i$`Age (months)`[data.pairs.i[,1]],
+    month2 = subject.i$`Age (months)`[data.pairs.i[,2]],
+    protrs1 = subject.i$protrs_stare[data.pairs.i[,1]],
+    protrs2 = subject.i$protrs_stare[data.pairs.i[,2]])
+  data.pairs = rbind(data.pairs, data.pairs.add)
+}
+data.pairs$lag = abs(data.pairs$month2 - data.pairs$month1) # list of time lag 
+
+x = sort(unique(data.pairs$lag))# list of unique time lag
+lag.list = x
+
+# v = dependent variable to fit a model on time lag
+data.pairs$v = (data.pairs$protrs1- data.pairs$protrs2)^2/2
+
+#ANOVA model
+model.anova = lm(v~as.factor(data.pairs$lag)-1,data = data.pairs)
+pred.anova=predict(model.anova,newdata = data.frame(lag=as.factor(data.pairs$lag)))
+
+# variance 
+numerator=0
+denominator=0
+for(i in 1:28)
+{
+  subset.i = data[data$`Subject ID`== i,]
+  subset.i2 = data[data$`Subject ID`>i,]
+  for(j in 1:dim(subset.i)[1])
+    numerator= numerator+sum((subset.i$protrs_stare[j]-subset.i2$protrs_stare)^2)
+  denominator = denominator + dim(subset.i)[1]*dim(subset.i2)[1]
+}
+sigma2 = numerator/denominator/2
+sigma2 #250.3808
+
+#Variogram
+plot(data.pairs$lag, data.pairs$v,xlab = 'Time lag', ylab = "Variogram")
+lines(1:length(pred.anova), pred.anova)
+lines(1:length(pred.anova), rep(sigma2,length(pred.anova)),lty = 2)
+
+# include small v only upto line 300
+# plot(data.pairs$lag, data.pairs$v, ylim = c(0,300), xlab = "Time lag", ylab = "Variogram")
+# lines(1:length(pred.anova), pred.anova)
+# lines(1:length(pred.anova), rep(sigma2,length(pred.anova)),lty = 2)
+```
+
+
+*Constant variance of residuals are checked from the errorbar plot (assumed)
+
+*Variance-Covariance-Correlation Model 
+
+* Exchangeable(Compound Symmetry) Correlation model:
+- same correlation for all pairs of observations on a typical subject
+- var(response) is constant over time
+
+*Exponential/AR(1) Correlation Model: 
+- Correlation of observations closer together in time is larger than that of observations farther apart. 
+- var(response) is constant over time
+
+*Unstructured Correlation Model
+- used when we don't want to make any assumptions about the correlation of the repeated observations on an individual
+- for approximately balanced data 
+
+- We might fit a model with no structure on the correlation matrix 
+- need finite number of time points
+- can be generalized further to allow for different variances at each time point
+
+Balanced Study Design
+- When number and timing of the repeated measurements are the same for all individuals over time 
+
+
+*Estimate var(Y) by ReML
+- restricted maximum likelihood for estimation for variance parameter
+- choose v-c-c model accordingly
+- does not include coefficient 
+- more robust to small samples or complicated mean models than is ML
+
+*Linear Mixed Model for Profile and Stare Front duration with covariates: continuous age and treatment group. with random intercept and random slope. 
+
+
+
+```{r}
+#LMM
+
+#Age as continuous
+# data$age2 = data$age_actual^2
+# data$age3 = data$age_actual^3
+colnames(data)[1] = c("obs")
+colnames(data)[2] = c("id") # change to fit in model without producing an error
+colnames(data)[8] = c("age") # change to fit in model without producing an error
+# colnames(data)[2] = c("Animal ID") # Re-change for previous code that used "Animal ID"
+# colnames(data)[8] = c("Age (months)") # Re-change for previous code that used "Age (months)"
+#colnames(data)[1] = c("Subject ID")
+
+#LMM with exponential/AR correlation
+#Age centered at 1 month
+
+data$age_days
+data$age_days1 = data$age_days - 30
+data$age1 = data$age_days1/(365.25/12) # centered age at 1 month
+data$age2 = data$age1^2
+data$age3 = data$age1^3
+
+
+
+# New age predictor = age1  # continuous
+
+# Flexible model with 
+
+# covariates: Treatment2, linear, quadratic, cubic age, and interaction of Treatment2 and linear, quadratic, cubic age with 
+
+# a random intercept and random slope for subject i with
+
+#Profile
+# with Exchangeable correlation (equivalently request random intercept) and random slope
+profile_lmm= lme(profile~Treatment2*age1 +Treatment2*age2+ Treatment2*age3,random = ~1+age1|id, data = data)
+summary(profile_lmm)
+
+# AIC, BIC, Loglik
+#1182.127	1216.258	-579.0637	
+
+#Between subject variance
+#Within subject varinance 
+#total variance (for residuals for subject i and time j)
+
+# exponential/AR1 correlation structure
+profile_lmm1= gls(profile~Treatment2+ age1 + age2 +age3+ Treatment2*age1 +Treatment2*age2+ Treatment2*age3,corr = corCAR1(form=~age1|id), data = data)
+summary(profile_lmm1)
+
+# AIC, BIC, Loglik
+#1178.077	1206.519	-579.0386	
+
+
+#Within-subject correlation
+#0.06848767 #very low 
+
+#Exponential +Exchangeable
+profile_lmm2= lme(profile~ Treatment2*age1+ Treatment2*age2 + Treatment2*age3, random = ~1+age1|id, data = data,corr = corCAR1(form=~age1|id))
+summary(profile_lmm2)
+
+# AIC, BIC, Loglik
+#1184.028	1221.002	-579.0138
+
+
+# #Exchangeable only
+# -2*-579.0637
+# #Exchangeable + Exponential
+# -2*-579.0138	
+# 
+# #reduced - full
+# 1073.037- 1072.937
+# pchisq(0.1, 1, lower.tail = TRUE)
+
+#p-value 0.2481704: exponential autocorrelation among the  residuals on the same subject is not significantly greater than 0 which means that exponential component of exchangeable + exponential model is unnecessary. 
+```
+
+*Hypothesis Testing
+
+- Test for the effect of MIA VS. Control on expected profile duration at week 1
+
+$H_0: \beta_1 = 0$
+
+$Ha: \neq \beta_1$
+
+- Test for Overall effect over months of MIA vs. Control on Profile duration at week 1
+
+- Test for Random effect
+
+test for random slope 
+
+-Use ReML based LRT
+
+```{r}
+#Test for random slope
+
+#ReML based LRT 
+profile_lmm= lme(profile~Treatment2*age1 +Treatment2*age2+ Treatment2*age3,random = ~1+age1|id, data = data)
+
+#Full model
+summary(profile_lmm)
+
+#Reduced model: random intercept only
+summary(lme(profile~Treatment2*age1 +Treatment2*age2+ Treatment2*age3,random = ~1|id, data = data))
+
+#chi^2 statistics
+(-2)*(-579.0637)-(-2)*(-579.0637)
+
+
+1-pchisq(0,2)					#conservative test
+1-0.5*pchisq(0,2)-0.5*pchisq(0,1)	#more accurate test
+
+#Random slope is unnecessary: slopes with respect to month does not vary significantly from subject to subject 
+```
+
+```{r}
+#F-test for testing significance 
+
+#Reduced model: random intercept only
+profile_fit = lme(profile~Treatment2*age1 +Treatment2*age2+ Treatment2*age3,random = ~1|id, data = data)
+
+summary(profile_fit)
+#fixed effect
+
+#cubic age and interaction
+L = matrix(c(0,0,0,0,1,0,0,0,
+             0,0,0,0,0,0,0,1),nrow = 2, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(profile_fit)$coef$fixed
+CLb = L%*%vcov(profile_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+1-pchisq(chi2,df = 2)
+#p-value  0.2893879
+#cubic age and interaction can be dropped 
+
+
+#quadratic age and interaction 
+
+L = matrix(c(0,0,0,1,0,0,0,0,
+             0,0,0,0,0,0,1,0),nrow = 2, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(profile_fit)$coef$fixed
+CLb = L%*%vcov(profile_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+
+1-pchisq(chi2,df = 2)
+# p-value 0.2432053
+
+#quadratic age and interaction can be dropped
+
+#
+#linear age and interaction 
+
+# L = matrix(c(0,0,0,1,0,0,0,0,
+#              0,0,0,0,1,0,0,0,
+#              0,0,0,0,0,1,0,0,
+#              0,0,0,0,0,0,1,0,
+#              0,0,0,0,0,0,0,1),nrow = 5, ncol = 8, byrow = TRUE)
+
+
+
+L = matrix(c(0,0,1,0,0,0,0,0,
+             0,0,0,0,0,1,0,0),nrow = 2, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(profile_fit)$coef$fixed
+CLb = L%*%vcov(profile_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+1-pchisq(chi2,df = 2)
+# p-value 0.1834384
+
+#linear age and interaction can be dropped
+
+# L = matrix(c(0,0,1,0,0,0,0,0,
+#              0,0,0,1,0,0,0,0,
+#              0,0,0,0,1,0,0,0,
+#              0,0,0,0,0,1,0,0,
+#              0,0,0,0,0,0,1,0,
+#              0,0,0,0,0,0,0,1),nrow = 6, ncol = 8, byrow = TRUE)
+# Lb = L%*%summary(profile_fit)$coef$fixed
+# CLb = L%*%vcov(profile_fit)%*%t(L)
+# chi2 = t(Lb)%*%solve(CLb)%*%Lb
+# chi2
+# 1-pchisq(chi2,df = 6)
+# 
+# 0.6269949
+
+#Multiple fixed effect testing result: linear, quadratic, cubic age and their interaction terms are not significant.
+
+#linear age is not significant 
+
+
+# Test for treatment group (MIA VS Control) on profile duration at 1 month (baseline:age centered at 1 month)
+summary(profile_fit)
+
+#t-value 2.139536	
+
+#p-value 0.0419
+
+# Group difference is significant at baseline: 1 month
+
+# Overall effect over time (months) of MIA vs. Control 
+
+L = matrix(c(0,1,0,0,0,0,0,0,
+             0,0,0,0,0,1,0,0,
+             0,0,0,0,0,0,1,0,
+             0,0,0,0,0,0,0,1),nrow = 4, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(profile_fit)$coef$fixed
+CLb = L%*%vcov(profile_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+
+1-pchisq(chi2,df = 4)
+0.324152 # p-value
+
+# No evidence that the 2 groups (MIA and control differ in their mean subject specific intercept or mean subject specific slope) with respect to time.
+
+#The average subject specific trend does not differ significantly across the two groups
+
+#There is no difference among the MIA and control groups changes over time.
+
+#Not significant predictors so far: linear,quadratic,cubic age and their interaction with treatment group: test conducted by chi-squared test.
+
+# LRT for testing random slope 
+
+#Final Model suggest that only there is a significant group effect at 1 month baseline period. However, we will include linear age without interaction term with treatment. Therefore the final model will have linear age and treatment group with an exchangeable correlation structure with a random intercept
+
+# profile_fit = lme(profile~Treatment2+ age1 + age2 +age3+ Treatment2*age1 +Treatment2*age2+ Treatment2*age3,random = ~1|id, data = data)
+
+
+#Plot of fitted response profiles
+profile_fit = lme(profile~Treatment2+age1,random = ~1|id, data = data)
+data$predprofile = fitted(profile_fit)
+ggplot(data, aes(x = age,y = predprofile, group = Treatment2, color = Treatment2))+
+  geom_line()+geom_point() + labs(x ="Age (Months)", y= "Predicted Profile Front Duration")
+```
+
+*Model Selection using AIC
+
+*Profile
+```{r}
+#Profile 
+
+#LMM with exchangeable correlation and random intercept and random slope 
+#profile_lmm
+
+
+#LMM without random slope
+profile_fit1 = lme(profile~Treatment2*age1 +Treatment2*age2+ Treatment2*age3,random = ~1|id, data = data)
+
+
+#Lower AIC of lmm with random intercept only
+
+#LMM with treatment and linear age
+profile_fit = lme(profile~Treatment2+age1, random = ~1|id, data = data)
+
+#Lower AIC for final model with treatment and linear age 
+
+#Lmm with treatment and linear age and treatment and linear age interaction
+profile_fit2 = lme(profile~Treatment2*age1, random = ~1|id, data = data)
+
+#LMM with treatement and linear and quadratic age without interactoin
+profile_fit3 = lme(profile~Treatment2+age1+age2, random = ~1|id, data = data)
+ 
+
+AIC(profile_lmm, profile_fit1,profile_fit, profile_fit2,profile_fit3)
+```
+
+
+* Profile Model Diagnostics
+```{r}
+#Evaluate the fitted model 
+
+#Fitted 
+data$profile_fitted = fitted(profile_fit) # fitted value of final model 
+# obtain observed mean duration for each time point and group 
+
+profit_sum = data %>%
+  group_by(age, Treatment2) %>%
+  summarise(
+    profile = mean(profile),
+    profile_fitted = mean(profile_fitted)
+  )
+
+ggplot(profit_sum) + 
+  geom_line(aes(x=age, y=profile_fitted, group=Treatment2, color=Treatment2)) +  
+  geom_point(aes(x=age, y=profile, group=Treatment2, color=Treatment2))+
+  labs(x="Age (months)", y = "Mean Profile Duration")
+```
+
+
+
+
+*Model for Stare 
+
+- all covariates are significant.
+```{r}
+# New age predictor = age1  # continuous
+
+# Flexible model with 
+
+# covariates: Treatment2, linear, quadratic, cubic age, and interaction of Treatment2 and linear, quadratic, cubic age with 
+
+# a random intercept and random slope for subject i with
+
+#Stare
+#Exchangeable Correlation with random intercept only (fitting random slope produces iteration convergence error)
+ctrl <- lmeControl(opt='optim')
+stare_lmm= lme(stare~Treatment2*age1 +Treatment2*age2+Treatment2*age3,random = ~1+age1|id, control=ctrl,data = data)
+summary(stare_lmm)
+
+# exponential/AR1 correlation structure continuous time covariate
+stare_lmm1= gls(stare~Treatment2*age1+ Treatment2*age2 + Treatment2*age3,corr = corCAR1(form=~age1|id), data = data)
+summary(stare_lmm1)
+
+#Within subject correlation is close to zero
+#9.36257e-05
+
+# Independence Correlation
+# stare_lmm2= gls(stare~Treatment2+poly(age1,3)+Treatment2*poly(age1,3), data = data)
+# summary(stare_lmm2)
+```
+
+```{r}
+#Test for random slope in model with exchangeable correlation
+
+#Full model
+summary(stare_lmm)
+
+
+# Reduced: random intercept only
+stare_fit = lme(stare~Treatment2*age1+ Treatment2*age2 + Treatment2*age3, random = ~1|id, data = data)
+
+#ReML based LRT
+-2*(-569.132-(-569.1898))
+1-0.5*pchisq(-0.1156,2)-0.5*pchisq(-0.1156,1)
+
+
+AIC(stare_lmm,stare_fit)
+#lower AIC OF LMM without random slope
+# Random slope can be dropped 
+# Slopes with respect to time does not vary significantly from subject to subject
+
+# stare model without random intercept only 
+stare_fit = lme(stare~Treatment2*age1+ Treatment2*age2 + Treatment2*age3, random = ~1|id, data = data)
+
+summary(stare_fit)
+```
+
+
+```{r}
+#Test for fixed effects 
+
+#cubic age and interaction
+L = matrix(c(0,0,0,0,1,0,0,0,
+             0,0,0,0,0,0,0,1),nrow = 2, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(stare_fit)$coef$fixed
+CLb = L%*%vcov(stare_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+
+9.49409
+1-pchisq(chi2,df = 2)
+
+#p-value 0.008677299
+
+#cubic age and interaction are significant
+
+
+#quadratic age and interaction 
+L = matrix(c(0,0,0,1,0,0,0,0,
+             0,0,0,0,0,0,1,0),nrow = 2, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(stare_fit)$coef$fixed
+CLb = L%*%vcov(stare_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+
+
+1-pchisq(chi2,df = 2)
+
+#p-value  0.004418771
+
+#quadratic age and interaction are significant
+
+
+#linear age interaction 
+L = matrix(c(0,0,1,0,0,0,0,0,
+             0,0,0,0,0,1,0,0),nrow = 2, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(stare_fit)$coef$fixed
+CLb = L%*%vcov(stare_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+1-pchisq(chi2,df = 2)
+
+
+0.004065946 #p-value 
+# multiple coefficient testing for linear, quadratic, cubic age and their interaction conclude that those terms are significant.
+
+# single coefficient testing for significance has been conducted by t-test (t-value from summary results and corresponding p-value)
+
+# Test for treatment group (MIA VS Control) on profile duration at 1 month (baseline:age centered at 1 month)
+summary(stare_fit)
+
+#t-value 1.929800
+
+#p-value	0.0646
+
+# Based on t test: Group difference is maybe not significant at baseline: 1 month
+
+#LRT: ML based
+summary(lme(stare~Treatment2*age1+ Treatment2*age2 + Treatment2*age3, random = ~1|id, data = data)) 
+
+# reduced model without treatment group
+summary(lme(stare~age1+age2+age3+ Treatment2*age2 + Treatment2*age3, random = ~1|id, data = data))
+
+# LR statistics = 0 
+
+1-pchisq(0,1)
+
+#Dropping Treatment group variable is unnecessary
+
+# Overall effect over time (months) of MIA vs. Control 
+L = matrix(c(0,1,0,0,0,0,0,0,
+             0,0,0,0,0,1,0,0,
+             0,0,0,0,0,0,1,0,
+             0,0,0,0,0,0,0,1),nrow = 4, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(stare_fit)$coef$fixed
+CLb = L%*%vcov(stare_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+
+1-pchisq(chi2,df = 4)
+0.1107611 # p-value
+
+
+# No evidence that the 2 groups (MIA and control differ in their mean subject specific intercept or mean subject specific slope) with respect to time.
+
+#The average subject specific trend does not differ significantly across the two groups
+
+
+#Final model for stare is
+stare_fit = lme(stare~Treatment2*age1+ Treatment2*age2 + Treatment2*age3, random = ~1|id, data = data)
+
+-2*(-563.3649-(-569.132))
+
+# #Test for overall group effect
+# Test for any difference among the treatment groups over time
+L = matrix(c(
+            0,0,1,0,0,0,0,0,
+             0,0,0,1,0,0,0,0,
+             0,0,0,0,1,0,0,0,
+             0,0,0,0,0,1,0,0,
+             0,0,0,0,0,0,1,0,
+             0,0,0,0,0,0,0,1),nrow = 6, ncol = 8, byrow = TRUE)
+Lb = L%*%summary(stare_fit)$coef$fixed
+CLb = L%*%vcov(stare_fit)%*%t(L)
+chi2 = t(Lb)%*%solve(CLb)%*%Lb
+chi2
+1-pchisq(22.4123,6)
+#p-value 0.00101921
+
+# Based on the p-value at significance level 0.05, treatment group difference at baseline (1 month) might not be a significant
+
+# chi-squared test suggest that there is overall group effect 
+
+
+```
+```{r}
+#Plot of fitted response profiles
+data$predstare = fitted(stare_fit)
+ggplot(data, aes(x = age,y = predstare, group = Treatment2, color = Treatment2))+
+  geom_line()+geom_point() + labs(x ="Age (Months)", y= "Predicted Profile Front Duration")
+```
+
+*Model Selection with AIC
+
+*Stare
+```{r}
+# stare model without random intercept only 
+stare_fit = lme(stare~Treatment2*age1+ Treatment2*age2 + Treatment2*age3, random = ~1|id, data = data)
+stare_fit1 = lme(stare~Treatment2*age1+ Treatment2*age2,random = ~1|id, data = data)
+stare_fit2 = lme(stare~Treatment2*age1, random= ~1|id, data = data)
+
+AIC(stare_fit,stare_fit1,stare_fit2)
+#Lowest AIC for LMM of linear age and treatment and interaction of linear age and treatment
+```
+
+
+
+*Stare model Diagnostics
+
+- Fitted mean functions vs. Observed mean for each time points.
+```{r}
+#Stare
+#Fitted 
+data$stare_fitted = fitted(stare_fit) # fitted value of final model 
+# obtain observed mean duration for each time point and group 
+
+starefit_sum = data %>%
+  group_by(age, Treatment2) %>%
+  summarise(
+    stare = mean(stare),
+    stare_fitted = mean(stare_fitted)
+  )
+starefit_sum
+
+ggplot(starefit_sum) + 
+  geom_line(aes(x=age, y=stare_fitted, group=Treatment2, color=Treatment2)) +  
+  geom_point(aes(x=age, y=stare, group=Treatment2, color=Treatment2))+
+  labs(x="Age (months)", y = "Mean Stare Duration")
+
+```
+
+
+
+*V-C-C Model Diagnostics
+
+- Evaluate fitted covariance model
+
+*Profile
+
+- Plot shows that the fitted covariance model does not capture pattern of empirical variance covariances
+
+```{r}
+## Compute model-based Cov Matrix (V_i=D_iGD_i'+sigma^2*I) 
+#Report G
+
+
+#profile_lmm #lmm with exchageable correlation with random intercept and random slope
+
+VarC=as.matrix(VarCorr(profile_lmm))
+
+G=matrix(NA,2,2)
+G[1,1]=as.numeric(VarC[1,1])
+G[2,2]=as.numeric(VarC[2,1])
+G[1,2]=G[2,1]=as.numeric(VarC[2,3])*sqrt(G[1,1]*G[2,2])
+G
+tau2=as.numeric(VarC[3,1])
+R=diag(5)*tau2
+R
+D=matrix(c(1,1,1,1,1,0,1,2,3,4),5,2)
+D
+
+V=D%*%G%*%t(D)+R
+V # model-based Cov Matrix
+
+## Compute Empirical Cov Matrix
+
+# Compute residuals using OLS, removing effects of month and group
+
+
+#ols for profile profile_dur_fit 
+
+# profile residuals  data$protrs_profile 
+
+# wide format of residuals  wide_profile 
+
+# Empirical covariance matrix
+Emp.V<-cov(wide_profile[,-1],use="pairwise.complete.obs")
+Emp.V
+
+plot(c(V),c(Emp.V),xlim=c(0,1),ylim=c(-116, 300),
+	xlab="Fitted covariance parameters",ylab="Empirical covariance parameters")
+abline(a = 0, b= 1)
+```
+
+*Stare
+
+```{r}
+
+#summary(stare_lmm) #lmm with exchageable correlation with random intercept and random slope
+
+VarC=as.matrix(VarCorr(stare_lmm))
+
+G=matrix(NA,2,2)
+G[1,1]=as.numeric(VarC[1,1])
+G[2,2]=as.numeric(VarC[2,1])
+G[1,2]=G[2,1]=as.numeric(VarC[2,3])*sqrt(G[1,1]*G[2,2])
+G
+tau2=as.numeric(VarC[3,1])
+R=diag(5)*tau2
+R
+D=matrix(c(1,1,1,1,1,0,1,2,3,4),5,2)
+D
+
+V=D%*%G%*%t(D)+R
+V # model-based Cov Matrix
+
+#ols for profile stare_dur_fit #ols for profile
+
+# profile residuals data$protrs_stare 
+
+# wide format of residuals #ols for profile
+wide_stare
+
+# Empirical covariance matrix
+Emp.V<-cov(wide_stare[,-1],use="pairwise.complete.obs")
+Emp.V
+
+
+plot(c(V),c(Emp.V),xlim=c(20,235),ylim=c( -120,  461),
+	xlab="Fitted covariance parameters",ylab="Empirical covariance parameters")
+abline(a=0,b=1)
+```
+
+* Table 2: Fixed-Effect Parameter Estimates(SE) for the linear mixed-effects models predicting Profile and Stare Front Duration
+```{r}
+
+
+#Export to excel 
+# stargazer(profile_lmm,stare_lmm,type="html",out="star_linear.doc", title = "Table 2: Fixed-Effect Parameter Estimates(SE) for the linear mixed-effects models predicting Profile and Stare Front Duration", align = TRUE, dep.var.labels = c("Profile Front Duration", "Stare Front Duration"), no.space = TRUE,omit.stat=c("LL","f"),covariate.labels = c("Treatment2Saline","Linear Age", "Quadratic Age", "Cubic Age", "Treatment2Saline:Linear Age","Treatment2Saline:Quadratic Age" ,"Treatment2Saline:Cubic Age","Intercept"), single.row=TRUE,notes = "Linear mixed-effect models were fitted with fixed effects for treatment group (MIA:PolyICLC, Control:Saline), linear, quadratic, and cubic age and their interactions, with exchangeable correlation for within-animal dependence. Interactions were not retained in the reported models if the overall test for age and group was non-significant. The intercept can be interpreted as the predicted profile/stare front duraiton at baseline month 1 for MIA group (baseline group in this model")
+```
+
+
+#5. Confidence Interval
+
+```{r}
+#95% Confidence intervals for fixed effects in Profile model 
+confint_profile= intervals(profile_lmm, level = 0.95,
+          which = c("fixed"))
+confint_profile
+  
+#95% Confidence intervals for fixed effects in stare model 
+confint_stare= intervals(stare_lmm, level = 0.95,
+          which = c("fixed"))
+confint_stare
+```
+
+
+# Final model equation (full writing in the report)
+
+Initial model 
+Profile 
+Let $Y_{ij}$ be the front duration for subject i, for i = ${1,..,n_i}$, at time j = ${1,...,n_j}$, and consider the model 
+$Y_{ij} = \beta_0 + \beta_1{1Treatment_{i}} + \beta_2({Months_{ij}-1}) +\beta_3({Months-1})^2 + \beta_4({Months-1})^3 + \beta_5{Treatment_i}*({Months_{ij}-1}) + \beta_6{Treatment_i}*({Months_{ij}-1})^2+ \beta_7{Treatment_i}*({Months_{ij}-1})^3 + e_{ij}+ U_{0i} + U_{1i}age + Z_{ij}$, where 
+
+$e_{ij} =  U_{0i} + U_{1i}({Months_{ij}-1}) + Z_{ij}$,$U_{0i}$ and $U_{1i}$ are random intercept and random slope, respectively for subject i.
+
+
+Stare
+$Y_{ij} = \beta_0 + \beta_1{Treatment_{i}} + \beta_2({Months_{ij}-1}) +\beta_3({Months-1})^2 + \beta_4({Months-1})^3 + \beta_5{Treatment_i}*({Months_{ij}-1}) + \beta_6{Treatment_i}*({Months_{ij}-1})^2+ \beta_7{Treatment_i}*({Months_{ij}-1})^3 + U_{0i} + U_{1i}age + Z_{ij}$
+$E[Profile_{ij}] = \beta_0 + \beta_1{Treatment_{i}} + \beta_2({Months_{ij}-1}) +\beta_3({Months-1})^2 + \beta_4({Months-1})^3 + \beta_5{Treatment_i}*({Months_{ij}-1}) + \beta_6{Treatment_i}*({Months_{ij}-1})^2+ \beta_7{Treatment_i}*({Months_{ij}-1})^3 + U_{0i} + U_{1i}age$
+
+
+$E[Stare_{ij}] = \beta_0 + \beta_1{Treatment_{i}} + \beta_2({Months_{ij}-1}) +\beta_3({Months-1})^2 + \beta_4({Months-1})^3 + \beta_5{Treatment_i}*({Months_{ij}-1}) + \beta_6{Treatment_i}*({Months_{ij}-1})^2+ \beta_7{Treatment_i}*({Months_{ij}-1})^3$
+
+
+
+ 
+ 
