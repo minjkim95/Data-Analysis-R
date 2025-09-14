@@ -7,4 +7,4 @@ Citation: Baumer, Benjamin S. Analyzing Baseball Data with R. CRC Press, 2019.
 
 ## Master: Longitudinal Data Analysis 
 This folder contains the data analysis report, presentation, and R-markdown used during Min's UC Davis Biostatistics Master's Comprehension Exam.
-The dataset used for this data analysis report is excluded from this folder since the dataset was provided as a subset of data from an ongoing aniaml neurodevelopmental research, which was not published at the time of the comprehension exam.  
+The dataset used for this data analysis report is excluded from this folder since the dataset was provided as a subset of data from an ongoing animal neurodevelopmental research, which was not published at the time of the comprehension exam.  
